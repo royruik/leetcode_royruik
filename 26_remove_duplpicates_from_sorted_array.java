@@ -40,16 +40,17 @@
 // nums 已按 非严格递增 排列
 class Solution {
     public int removeDuplicates(int[] nums) {
-        int [] removed = new int [nums.length];
-        int n, i = 0;
-        while(i < nums.length - 1){
-            if (i != nums.length - 1 && nums[i] != num[i+1] ) {
-                removed[n] = nums[i];
-                n++;
+        if (nums.length == 0) {
+            return nums.length;
+        }
+        int i = 1, n = 1;
+        while(i < nums.length){
+            if (nums[i] != nums[i-1]) {
+                nums[n] = nums[i];
+                n++; 
             }
             i++;
         }
-        nums = removed;
         return n;
     }
 }
