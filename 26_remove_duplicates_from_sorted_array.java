@@ -1,43 +1,47 @@
-// 给你一个 非严格递增排列 的数组 nums ，请你 原地 删除重复出现的元素，使每个元素 只出现一次 ，返回删除后数组的新长度。元素的 相对顺序 应该保持 一致 。然后返回 nums 中唯一元素的个数。
+// Given an integer array nums sorted in non-decreasing order, remove some duplicates in-place such that each unique element appears at most twice. The relative order of the elements should be kept the same.
 
-// 考虑 nums 的唯一元素的数量为 k ，你需要做以下事情确保你的题解可以被通过：
+// Since it is impossible to change the length of the array in some languages, you must instead have the result be placed in the first part of the array nums. More formally, if there are k elements after removing the duplicates, then the first k elements of nums should hold the final result. It does not matter what you leave beyond the first k elements.
 
-// 更改数组 nums ，使 nums 的前 k 个元素包含唯一元素，并按照它们最初在 nums 中出现的顺序排列。nums 的其余元素与 nums 的大小不重要。
-// 返回 k 。
-// 判题标准:
+// Return k after placing the final result in the first k slots of nums.
 
-// 系统会用下面的代码来测试你的题解:
+// Do not allocate extra space for another array. You must do this by modifying the input array in-place with O(1) extra memory.
 
-// int[] nums = [...]; // 输入数组
-// int[] expectedNums = [...]; // 长度正确的期望答案
+// Custom Judge:
 
-// int k = removeDuplicates(nums); // 调用
+// The judge will test your solution with the following code:
+
+// int[] nums = [...]; // Input array
+// int[] expectedNums = [...]; // The expected answer with correct length
+
+// int k = removeDuplicates(nums); // Calls your implementation
 
 // assert k == expectedNums.length;
 // for (int i = 0; i < k; i++) {
 //     assert nums[i] == expectedNums[i];
 // }
-// 如果所有断言都通过，那么您的题解将被 通过。
+// If all assertions pass, then your solution will be accepted.
 
  
 
-// 示例 1：
+// Example 1:
 
-// 输入：nums = [1,1,2]
-// 输出：2, nums = [1,2,_]
-// 解释：函数应该返回新的长度 2 ，并且原数组 nums 的前两个元素被修改为 1, 2 。不需要考虑数组中超出新长度后面的元素。
-// 示例 2：
+// Input: nums = [1,1,1,2,2,3]
+// Output: 5, nums = [1,1,2,2,3,_]
+// Explanation: Your function should return k = 5, with the first five elements of nums being 1, 1, 2, 2 and 3 respectively.
+// It does not matter what you leave beyond the returned k (hence they are underscores).
+// Example 2:
 
-// 输入：nums = [0,0,1,1,1,2,2,3,3,4]
-// 输出：5, nums = [0,1,2,3,4]
-// 解释：函数应该返回新的长度 5 ， 并且原数组 nums 的前五个元素被修改为 0, 1, 2, 3, 4 。不需要考虑数组中超出新长度后面的元素。
+// Input: nums = [0,0,1,1,1,1,2,3,3]
+// Output: 7, nums = [0,0,1,1,2,3,3,_,_]
+// Explanation: Your function should return k = 7, with the first seven elements of nums being 0, 0, 1, 1, 2, 3 and 3 respectively.
+// It does not matter what you leave beyond the returned k (hence they are underscores).
  
 
-// 提示：
+// Constraints:
 
 // 1 <= nums.length <= 3 * 104
 // -104 <= nums[i] <= 104
-// nums 已按 非严格递增 排列
+// nums is sorted in non-decreasing order.
 class Solution {
     public int removeDuplicates(int[] nums) {
         if (nums.length == 0) {
