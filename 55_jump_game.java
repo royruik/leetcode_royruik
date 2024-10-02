@@ -22,28 +22,28 @@
 // 0 <= nums[i] <= 105
 
 // Thought: Maybe check every 0's? (brutal solution)
-// recursive help function? 
+// recursive help function? (...)
 class Solution {
     public boolean canJump(int[] nums) {
-        if(nums.length < 2){
+        if(nums.length < 2){ //The ending point is the starting point.
             return true;
         }
-    	for (int i = 0; i < nums.length - 1; i++) {
-    		if (nums[i] == 0) {
+    	for (int i = 0; i < nums.length - 1; i++) { //Loop over the array (except the ending point) to find the breakpoints (0's)
+    		if (nums[i] == 0) { //We found it!
     			int j = 0;
-    			boolean flag = false;
-    			while(j < i && !flag){
-    				if (j + nums[j] > i) {
-    					flag = true;
+    			boolean flag = false;  //flag = false: keep the while loop (as now we didnt find the solution to jump the breakpoint)
+    			while(j < i && !flag){ //Only the element before the breakpoint is checked
+    				if (j + nums[j] > i) {//When certain point's value can exceed the breakpoint
+    					flag = true;//flag = true: we find the solution, this breakpoint can be ignored
     				}
-                    j++;
+                    j++;//loop over the possible points
     			}
-    			if (flag == false) {
-    				return false;
+    			if (flag == false) {//after the iteration, we dont find the solution
+    				return false;//as such, the mission failed
     			}
 
     		}
     	}
-    	return true;
+    	return true;//we found the solution for every breakpoints we detected, mission accomplished
     }
 }
