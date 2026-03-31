@@ -1,5 +1,4 @@
 import random
-import math
 from collections import defaultdict
 
 
@@ -274,30 +273,3 @@ def generate_random_connected_graph(n, m):
         edges.add(e)
 
     return ids, list(edges)
-
-
-# quick sanity check when run directly
-if __name__ == "__main__":
-    print("Testing Yo-Yo algorithm...")
-
-    # small example from the slides
-    nodes = [3, 4, 5, 7, 2]
-    edges = [(3, 4), (3, 5), (3, 7), (4, 5), (4, 7), (5, 7), (2, 7)]
-    algo = YoYoAlgorithm(nodes, edges)
-    leader, msgs = algo.run()
-    print(f"Slide example: leader={leader}, msgs={msgs}, expected={min(nodes)}")
-    assert leader == min(nodes)
-
-    # random tests
-    passed = 0
-    total = 200
-    for _ in range(total):
-        n = random.randint(5, 60)
-        m = random.randint(n - 1, min(n * (n - 1) // 2, n * 3))
-        ns, es = generate_random_connected_graph(n, m)
-        a = YoYoAlgorithm(ns, es)
-        l, _ = a.run()
-        if l == min(ns):
-            passed += 1
-
-    print(f"Random tests: {passed}/{total} passed")

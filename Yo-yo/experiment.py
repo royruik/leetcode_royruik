@@ -23,7 +23,7 @@ TRIALS = 1000
 # node counts we test
 N_VALUES = [20, 30, 40, 60, 80, 100]
 # for experiment 2
-LINEAR_DENSITIES = [2, 3]
+LINEAR_DENSITIES = [2, 3, 10]
 
 
 def get_density_levels(n):
@@ -97,14 +97,6 @@ def experiment1():
             ax.annotate(f"{a:.0f}", (m, a), textcoords="offset points",
                         xytext=(5, 8), fontsize=7, color=palette[i])
 
-    # vertical lines showing density levels (using n=100 as reference)
-    nice_names = {"n": "m=n", "n*log(n)": "m=n log n",
-                  "n*sqrt(n)": "m=n sqrt(n)", "n^2": "m=n^2"}
-    for label, m, *_ in data[100]:
-        ax.axvline(x=m, color="gray", ls="--", alpha=0.3, zorder=1)
-        ax.text(m, ax.get_ylim()[1] or 10000, nice_names.get(label, label),
-                va="bottom", ha="center", fontsize=9, color="gray", style="italic")
-
     ax.set_xlabel("Number of Edges (m)", fontsize=13)
     ax.set_ylabel("Average Message Complexity", fontsize=13)
     ax.set_title("Experiment 1: Impact of Graph Density on Message Complexity",
@@ -153,8 +145,8 @@ def experiment2():
 
     # plot
     fig, ax = plt.subplots(figsize=(10, 6))
-    colors = ["#2196F3", "#FF5722"]
-    marks = ["o", "s"]
+    colors = ["#2196F3", "#FF5722", "#4CAF50", "#9C27B0", "#FF9800"]
+    marks = ["o", "s", "^", "D", "v"]
 
     for i, k in enumerate(LINEAR_DENSITIES):
         ns = [r[0] for r in data[k]]
