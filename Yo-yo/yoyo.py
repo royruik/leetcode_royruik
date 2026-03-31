@@ -2,16 +2,6 @@
 Yo-Yo Leader Election Algorithm
 ================================
 Implements the Yo-Yo protocol for leader election in arbitrary connected graphs.
-Based on Prof. Paola Flocchini's CSI4109 lecture slides .
-
-The algorithm elects the node with the minimum ID as the leader.
-
-Phases:
-  1. Initialization: Orient edges from smaller to larger ID → DAG
-  2. YO- (send down): Sources push their value down; internals forward the min
-  3. -YO (send up): Sinks/internals send Yes/No back up
-  4. Flip edges that carried "No", prune redundant links
-  5. Repeat until one source remains → that's the leader
 """
 
 import random
@@ -412,66 +402,3 @@ def generate_random_connected_graph(n, m):
         edges.add(edge)
 
     return node_ids, list(edges)
-
-
-# =========================================================================
-# Demo / Testing
-# =========================================================================
-if __name__ == "__main__":
-    print("=" * 60)
-    print("Yo-Yo Leader Election Algorithm — Demo")
-    print("=" * 60)
-
-    # --- Example from the slides: nodes {3, 4, 5, 7, 2} ---
-    print("\n--- Slide Example ---")
-    # This is the example from the lecture slides
-    nodes = [3, 4, 5, 7, 2]
-    # Approximate edges from the slide DAG
-    edges = [(3, 4), (3, 5), (3, 7), (4, 5), (4, 7), (5, 7), (2, 7)]
-    algo = YoYoAlgorithm(nodes, edges)
-    leader, msgs = algo.run()
-    print(f"  Nodes: {nodes}")
-    print(f"  Edges: {edges}")
-    print(f"  Elected leader: {leader}")
-    print(f"  Messages sent:  {msgs}")
-    print(f"  Expected leader: {min(nodes)}")
-    assert leader == min(nodes), f"WRONG leader! Got {leader}, expected {min(nodes)}"
-    print("  ✓ Correct!")
-
-    # --- Random graph tests ---
-    print("\n--- Random Graph Tests ---")
-    test_configs = [
-        (10, 15),
-        (20, 40),
-        (50, 100),
-        (100, 200),
-    ]
-
-    for n, m in test_configs:
-        nodes, edges = generate_random_connected_graph(n, m)
-        algo = YoYoAlgorithm(nodes, edges)
-        leader, msgs = algo.run()
-        expected = min(nodes)
-        status = "✓" if leader == expected else "✗"
-        print(f"  n={n:3d}, m={len(edges):4d} | Leader: {leader:4d} | "
-              f"Expected: {expected:4d} | Messages: {msgs:5d} | {status}")
-        assert leader == expected, f"WRONG leader for n={n}, m={m}"
-
-    # --- Stress test ---
-    print("\n--- Stress Test (100 random graphs) ---")
-    failures = 0
-    for i in range(100):
-        n = random.randint(5, 50)
-        max_m = n * (n - 1) // 2
-        m = random.randint(n - 1, min(max_m, n * 3))
-        nodes, edges = generate_random_connected_graph(n, m)
-        algo = YoYoAlgorithm(nodes, edges)
-        leader, msgs = algo.run()
-        if leader != min(nodes):
-            failures += 1
-            print(f"  FAIL: n={n}, m={len(edges)}, got {leader}, expected {min(nodes)}")
-
-    print(f"  Results: {100 - failures}/100 passed")
-    if failures == 0:
-        print("  ✓ All tests passed!")
-    print()
