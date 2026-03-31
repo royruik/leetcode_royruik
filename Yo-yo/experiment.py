@@ -144,26 +144,40 @@ def run_experiment1():
                 writer.writerow([n, label, m, f"{avg:.2f}", mn, mx, f"{std:.2f}"])
     print("\n  -> Saved: experiment1_results.csv")
 
-    # ── Plot ──
-    fig, ax = plt.subplots(figsize=(10, 6))
-    colors = plt.cm.viridis([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    # ── Plot: line plot, one line per n, x = m with density labels ──
+    fig, ax = plt.subplots(figsize=(11, 7))
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#e377c2"]
+    markers = ["o", "s", "^", "D", "v", "P"]
 
     for i, n in enumerate(N_VALUES):
         m_vals = [r[1] for r in results[n]]
         avg_vals = [r[2] for r in results[n]]
-        ax.plot(m_vals, avg_vals, marker="o", linewidth=2, markersize=6,
-                color=colors[i], label=f"n = {n}")
+        ax.plot(m_vals, avg_vals, marker=markers[i], linewidth=2, markersize=7,
+                color=colors[i], label=f"n = {n}", zorder=3)
 
-    ax.set_xlabel("Number of Edges (m)", fontsize=12)
-    ax.set_ylabel("Average Message Complexity", fontsize=12)
+        # Annotate each point with its value
+        for m, avg in zip(m_vals, avg_vals):
+            ax.annotate(f"{avg:.0f}", (m, avg), textcoords="offset points",
+                        xytext=(5, 8), fontsize=7, color=colors[i])
+
+    # Add vertical reference lines at density levels for n=100
+    density_display = {"n": "m=n", "n*log(n)": "m=n log n",
+                       "n*sqrt(n)": "m=n sqrt(n)", "n^2": "m=n^2"}
+    for label, m, avg, mn, mx, std in results[100]:
+        display = density_display.get(label, label)
+        ax.axvline(x=m, color="gray", linestyle="--", alpha=0.3, zorder=1)
+        ax.text(m, ax.get_ylim()[1] if ax.get_ylim()[1] > 0 else 10000,
+                display, rotation=0, va="bottom", ha="center",
+                fontsize=9, color="gray", style="italic")
+
+    ax.set_xlabel("Number of Edges (m)", fontsize=13)
+    ax.set_ylabel("Average Message Complexity", fontsize=13)
     ax.set_title("Experiment 1: Impact of Graph Density on Message Complexity",
-                 fontsize=14, fontweight="bold")
-    ax.legend(title="Nodes", fontsize=10)
+                 fontsize=15, fontweight="bold")
+    ax.legend(title="Nodes", fontsize=10, loc="upper left")
     ax.grid(True, alpha=0.3)
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
-    ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
     plt.tight_layout()
     fig.savefig("experiment1_density.png", dpi=150)
     plt.close()

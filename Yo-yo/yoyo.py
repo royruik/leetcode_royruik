@@ -1,404 +1,207 @@
 """
-Yo-Yo Leader Election Algorithm
-================================
-Implements the Yo-Yo protocol for leader election in arbitrary connected graphs.
+Experimental analysis of the Yo-Yo algorithm's message complexity.
+Runs two sets of experiments and produces plots + CSV data.
+
+Experiment 1: fix n, vary m across four density levels
+Experiment 2: fix m = k*n (linear density), vary n
 """
 
-import random
 import math
+import time
+import csv
+import sys
 from collections import defaultdict
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
-class YoYoAlgorithm:
-    """
-    Simulates the Yo-Yo leader election algorithm on an arbitrary connected graph.
+from yoyo import YoYoAlgorithm, generate_random_connected_graph
 
-    Attributes:
-        nodes: list of node IDs (distinct positive integers)
-        edges: list of (u, v) undirected edges
-        message_count: total messages sent during the algorithm
-    """
-
-    def __init__(self, nodes, edges):
-        """
-        Args:
-            nodes: list of distinct node IDs
-            edges: list of (u, v) tuples representing undirected edges
-        """
-        self.nodes = list(nodes)
-        self.edges = list(edges)
-        self.message_count = 0
-
-        # Adjacency list for the undirected graph
-        self.adj = defaultdict(set)
-        for u, v in self.edges:
-            self.adj[u].add(v)
-            self.adj[v].add(u)
-
-        # DAG representation: in-neighbors and out-neighbors for each node
-        self.in_neighbors = defaultdict(set)
-        self.out_neighbors = defaultdict(set)
-
-        # Track which nodes are still active (not pruned)
-        self.active = set(nodes)
-
-    def run(self):
-        """
-        Execute the Yo-Yo algorithm and return the elected leader.
-
-        Returns:
-            (leader_id, message_count) tuple
-        """
-        self.message_count = 0
-        self._initialize_dag()
-
-        while True:
-            sources = self._get_sources()
-
-            # If only one source remains, it's the leader
-            if len(sources) == 1:
-                return sources[0], self.message_count
-
-            # If no sources (shouldn't happen in a correct run), break
-            if len(sources) == 0:
-                break
-
-            # Execute one Yo-Yo iteration
-            self._yo_down_yo_up()
-
-        # Fallback: return the minimum active node
-        return min(self.active), self.message_count
-
-    def _initialize_dag(self):
-        """
-        Phase 1: Orient edges to form a DAG.
-        Each node exchanges its ID with all neighbors (1 message per direction per edge).
-        Edge is directed from smaller ID to larger ID.
-        Cost: O(m) messages (2 messages per edge, but we count each exchange as 2).
-        """
-        self.in_neighbors = defaultdict(set)
-        self.out_neighbors = defaultdict(set)
-
-        for u, v in self.edges:
-            # Each node sends its ID to the neighbor: 2 messages per edge
-            self.message_count += 2
-
-            if u < v:
-                # Edge directed from u → v (smaller to larger)
-                self.out_neighbors[u].add(v)
-                self.in_neighbors[v].add(u)
-            else:
-                # Edge directed from v → u
-                self.out_neighbors[v].add(u)
-                self.in_neighbors[u].add(v)
-
-    def _get_sources(self):
-        """Return all active nodes with no in-neighbors (sources in the DAG)."""
-        return [n for n in self.active
-                if len(self.in_neighbors[n] & self.active) == 0
-                and len(self.out_neighbors[n] & self.active) > 0]
-
-    def _get_sinks(self):
-        """Return all active nodes with no out-neighbors (sinks in the DAG)."""
-        return [n for n in self.active
-                if len(self.out_neighbors[n] & self.active) == 0
-                and len(self.in_neighbors[n] & self.active) > 0]
-
-    def _get_role(self, node):
-        """Determine if a node is a source, sink, or internal."""
-        has_in = len(self.in_neighbors[node] & self.active) > 0
-        has_out = len(self.out_neighbors[node] & self.active) > 0
-        if not has_in and has_out:
-            return "source"
-        elif has_in and not has_out:
-            return "sink"
-        elif has_in and has_out:
-            return "internal"
-        else:
-            return "isolated"
-
-    def _yo_down_yo_up(self):
-        """
-        Execute one full Yo-Yo iteration:
-          1. YO- (send down): propagate minimum values from sources to sinks
-          2. -YO (send up): send Yes/No responses back from sinks to sources
-          3. Flip edges with "No" and apply pruning rules
-        """
-        # =====================================================================
-        # YO- PHASE (send down)
-        # =====================================================================
-        # For each node, track the minimum value received and who sent it
-        # min_value[node] = the minimum value this node will forward
-        # received_from[node] = dict {in_neighbor: value_sent}
-
-        min_value = {}
-        received_from = defaultdict(dict)  # node -> {sender: value}
-
-        # BFS-like topological processing: process nodes level by level
-        # Sources start by "sending" their own ID
-        sources = self._get_sources()
-        for s in sources:
-            min_value[s] = s  # A source's value is its own ID
-
-        # Process in topological order using in-degree tracking
-        # Count active in-neighbors for each active node
-        pending_in = {}
-        for n in self.active:
-            pending_in[n] = len(self.in_neighbors[n] & self.active)
-
-        # Queue starts with sources (pending_in == 0 and has out-neighbors)
-        queue = list(sources)
-        processed = set()
-
-        while queue:
-            node = queue.pop(0)
-            if node in processed:
-                continue
-            processed.add(node)
-
-            role = self._get_role(node)
-
-            if role == "source":
-                # Source sends its own value to all out-neighbors
-                val = node
-                min_value[node] = val
-                for out_n in self.out_neighbors[node] & self.active:
-                    self.message_count += 1  # one message sent
-                    received_from[out_n][node] = val
-                    pending_in[out_n] -= 1
-                    if pending_in[out_n] == 0:
-                        queue.append(out_n)
-
-            elif role in ("internal", "sink"):
-                # Node has received values from all in-neighbors
-                if not received_from[node]:
-                    continue
-
-                val = min(received_from[node].values())
-                min_value[node] = val
-
-                if role == "internal":
-                    # Forward the minimum to all out-neighbors
-                    for out_n in self.out_neighbors[node] & self.active:
-                        self.message_count += 1
-                        received_from[out_n][node] = val
-                        pending_in[out_n] -= 1
-                        if pending_in[out_n] == 0:
-                            queue.append(out_n)
-
-        # =====================================================================
-        # -YO PHASE (send up)
-        # =====================================================================
-        # For each node, determine Yes/No responses to send to in-neighbors
-        # response_to[node] = dict {in_neighbor: "yes" or "no"}
-        # response_from[node] = dict {out_neighbor: "yes" or "no"}
-
-        response_from = defaultdict(dict)  # node -> {out_neighbor: response}
-
-        # Process in reverse topological order: sinks first, then internals, then sources
-        # Use reverse BFS from sinks
-        pending_out = {}
-        for n in self.active:
-            pending_out[n] = len(self.out_neighbors[n] & self.active)
-
-        sinks = self._get_sinks()
-        queue = list(sinks)
-        processed = set()
-
-        while queue:
-            node = queue.pop(0)
-            if node in processed:
-                continue
-            processed.add(node)
-
-            role = self._get_role(node)
-
-            if role == "sink":
-                # Send Yes to the in-neighbor(s) that sent the min value, No to others
-                if not received_from[node]:
-                    continue
-
-                local_min = min_value[node]
-                for in_n, val in received_from[node].items():
-                    if val == local_min:
-                        self.message_count += 1
-                        response_from[in_n][node] = "yes"
-                    else:
-                        self.message_count += 1
-                        response_from[in_n][node] = "no"
-
-                # Update pending for in-neighbors
-                for in_n in self.in_neighbors[node] & self.active:
-                    pending_out[in_n] -= 1
-                    if pending_out[in_n] == 0:
-                        queue.append(in_n)
-
-            elif role == "internal":
-                # Check responses from out-neighbors
-                responses = response_from[node]
-                got_no = any(r == "no" for r in responses.values())
-
-                if got_no:
-                    # Send No to ALL in-neighbors
-                    for in_n in self.in_neighbors[node] & self.active:
-                        self.message_count += 1
-                        response_from[in_n][node] = "no"
-                else:
-                    # All Yes: send Yes to min sender, No to others
-                    local_min = min_value[node]
-                    for in_n, val in received_from[node].items():
-                        if val == local_min:
-                            self.message_count += 1
-                            response_from[in_n][node] = "yes"
-                        else:
-                            self.message_count += 1
-                            response_from[in_n][node] = "no"
-
-                # Update pending for in-neighbors
-                for in_n in self.in_neighbors[node] & self.active:
-                    pending_out[in_n] -= 1
-                    if pending_out[in_n] == 0:
-                        queue.append(in_n)
-
-            elif role == "source":
-                # Source just collects responses — handled below
-                pass
-
-        # =====================================================================
-        # FLIP & PRUNE
-        # =====================================================================
-
-        # Collect all edges to flip (those that carried "No")
-        edges_to_flip = []
-
-        for node in self.active:
-            role = self._get_role(node)
-            if role in ("source", "internal"):
-                for out_n, resp in response_from[node].items():
-                    if resp == "no":
-                        edges_to_flip.append((node, out_n))
-
-        # Flip edges
-        for u, v in edges_to_flip:
-            # Remove u → v, add v → u
-            self.out_neighbors[u].discard(v)
-            self.in_neighbors[v].discard(u)
-            self.out_neighbors[v].add(u)
-            self.in_neighbors[u].add(v)
-
-        # --- Pruning Rule 1: Remove sinks with exactly one in-neighbor ---
-        changed = True
-        while changed:
-            changed = False
-            to_remove = []
-            for n in list(self.active):
-                if self._get_role(n) == "sink":
-                    active_in = self.in_neighbors[n] & self.active
-                    if len(active_in) == 1:
-                        to_remove.append(n)
-            for n in to_remove:
-                self.active.discard(n)
-                changed = True
-
-        # --- Pruning Rule 2: Remove redundant Yes edges ---
-        # If a node received the same minimum value from multiple in-neighbors,
-        # keep only one such edge and prune the rest.
-        # (Only prune redundant YES edges, NOT redundant NO edges)
-        for node in list(self.active):
-            if self._get_role(node) in ("internal", "sink"):
-                active_in = self.in_neighbors[node] & self.active
-                if len(active_in) <= 1:
-                    continue
-
-                # Group in-neighbors by the value they sent during YO-down
-                value_senders = defaultdict(list)
-                for in_n in active_in:
-                    if node in received_from and in_n in received_from.get(node, {}):
-                        val = received_from[node][in_n]
-                        value_senders[val].append(in_n)
-
-                # For each value sent by multiple in-neighbors, keep only one
-                # But only prune if these were YES edges (not NO)
-                for val, senders in value_senders.items():
-                    if len(senders) > 1:
-                        # Check which of these senders got a "yes" response
-                        yes_senders = [s for s in senders
-                                       if response_from.get(s, {}).get(node) == "yes"]
-                        if len(yes_senders) > 1:
-                            # Keep the first, prune the rest
-                            for s in yes_senders[1:]:
-                                self.out_neighbors[s].discard(node)
-                                self.in_neighbors[node].discard(s)
-                                # If s has no more connections, deactivate
-                                if (len(self.out_neighbors[s] & self.active) == 0
-                                        and len(self.in_neighbors[s] & self.active) == 0):
-                                    self.active.discard(s)
-
-        # Re-check for sinks with one in-neighbor after pruning rule 2
-        changed = True
-        while changed:
-            changed = False
-            to_remove = []
-            for n in list(self.active):
-                if self._get_role(n) == "sink":
-                    active_in = self.in_neighbors[n] & self.active
-                    if len(active_in) == 1:
-                        to_remove.append(n)
-            for n in to_remove:
-                self.active.discard(n)
-                changed = True
-
-        # Remove isolated nodes (no active neighbors at all)
-        for n in list(self.active):
-            if self._get_role(n) == "isolated":
-                # Keep it only if it's the sole remaining node
-                if len(self.active) > 1:
-                    self.active.discard(n)
+# how many times to repeat each (n, m) config
+TRIALS = 1000
+# node counts we test
+N_VALUES = [20, 30, 40, 60, 80, 100]
+# for experiment 2
+LINEAR_DENSITIES = [2, 3]
 
 
-def generate_random_connected_graph(n, m):
-    """
-    Generate a random connected graph with n nodes and m edges.
-    Nodes are labeled with distinct random IDs.
+def get_density_levels(n):
+    """Return the four (label, m) pairs for a given n, clamped to valid range."""
+    max_m = n * (n - 1) // 2
+    levels = [
+        ("n",         n),
+        ("n*log(n)",  int(n * math.log2(n))),
+        ("n*sqrt(n)", int(n * math.sqrt(n))),
+        ("n^2",       n * n),
+    ]
+    return [(lbl, max(n - 1, min(m, max_m))) for lbl, m in levels]
 
-    Args:
-        n: number of nodes
-        m: number of edges (must be >= n-1 and <= n*(n-1)/2)
 
-    Returns:
-        (nodes, edges) where nodes is a list of distinct IDs
-        and edges is a list of (u, v) tuples
-    """
-    max_edges = n * (n - 1) // 2
-    m = min(m, max_edges)
-    m = max(m, n - 1)  # Need at least n-1 edges for connectivity
+def run_trials(n, m, trials=TRIALS):
+    """Run the algorithm `trials` times, return (avg, min, max, std)."""
+    counts = []
+    for _ in range(trials):
+        nodes, edges = generate_random_connected_graph(n, m)
+        algo = YoYoAlgorithm(nodes, edges)
+        _, msgs = algo.run()
+        counts.append(msgs)
 
-    # Assign distinct random IDs to nodes
-    node_ids = random.sample(range(1, 10 * n + 1), n)
+    avg = sum(counts) / len(counts)
+    lo, hi = min(counts), max(counts)
+    std = (sum((x - avg) ** 2 for x in counts) / len(counts)) ** 0.5
+    return avg, lo, hi, std
 
-    # Build a spanning tree first to ensure connectivity
-    shuffled = list(node_ids)
-    random.shuffle(shuffled)
-    edges = set()
 
-    for i in range(1, n):
-        # Connect node i to a random node in [0, i-1]
-        j = random.randint(0, i - 1)
-        u, v = shuffled[i], shuffled[j]
-        edge = (min(u, v), max(u, v))
-        edges.add(edge)
+# ---- Experiment 1: fix n, vary density ----
 
-    # Add remaining random edges
-    all_possible = []
-    for i in range(n):
-        for j in range(i + 1, n):
-            edge = (min(node_ids[i], node_ids[j]), max(node_ids[i], node_ids[j]))
-            if edge not in edges:
-                all_possible.append(edge)
+def experiment1():
+    print("=" * 60)
+    print("EXPERIMENT 1: fix n, vary m")
+    print("=" * 60)
 
-    random.shuffle(all_possible)
-    remaining = m - len(edges)
-    for edge in all_possible[:remaining]:
-        edges.add(edge)
+    data = defaultdict(list)  # n -> [(label, m, avg, min, max, std)]
 
-    return node_ids, list(edges)
+    for n in N_VALUES:
+        levels = get_density_levels(n)
+        print(f"\n  n = {n}:")
+        for label, m in levels:
+            t0 = time.time()
+            avg, lo, hi, std = run_trials(n, m)
+            dt = time.time() - t0
+            data[n].append((label, m, avg, lo, hi, std))
+            print(f"    m={m:>5} ({label:>9}) | avg={avg:8.1f}  "
+                  f"min={lo:5}  max={hi:5}  std={std:6.1f}  ({dt:.1f}s)")
+
+    # save csv
+    with open("experiment1_results.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["n", "m_label", "m_actual", "avg_messages",
+                     "min_messages", "max_messages", "std_dev"])
+        for n in N_VALUES:
+            for label, m, avg, lo, hi, std in data[n]:
+                w.writerow([n, label, m, f"{avg:.2f}", lo, hi, f"{std:.2f}"])
+    print("\n  Saved experiment1_results.csv")
+
+    # plot: one line per n, x = m (log-log)
+    fig, ax = plt.subplots(figsize=(11, 7))
+    palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#e377c2"]
+    shapes = ["o", "s", "^", "D", "v", "P"]
+
+    for i, n in enumerate(N_VALUES):
+        ms = [r[1] for r in data[n]]
+        avgs = [r[2] for r in data[n]]
+        ax.plot(ms, avgs, marker=shapes[i], linewidth=2, markersize=7,
+                color=palette[i], label=f"n={n}", zorder=3)
+        for m, a in zip(ms, avgs):
+            ax.annotate(f"{a:.0f}", (m, a), textcoords="offset points",
+                        xytext=(5, 8), fontsize=7, color=palette[i])
+
+    # vertical lines showing density levels (using n=100 as reference)
+    nice_names = {"n": "m=n", "n*log(n)": "m=n log n",
+                  "n*sqrt(n)": "m=n sqrt(n)", "n^2": "m=n^2"}
+    for label, m, *_ in data[100]:
+        ax.axvline(x=m, color="gray", ls="--", alpha=0.3, zorder=1)
+        ax.text(m, ax.get_ylim()[1] or 10000, nice_names.get(label, label),
+                va="bottom", ha="center", fontsize=9, color="gray", style="italic")
+
+    ax.set_xlabel("Number of Edges (m)", fontsize=13)
+    ax.set_ylabel("Average Message Complexity", fontsize=13)
+    ax.set_title("Experiment 1: Impact of Graph Density on Message Complexity",
+                 fontsize=15, fontweight="bold")
+    ax.legend(title="Nodes", fontsize=10, loc="upper left")
+    ax.grid(True, alpha=0.3)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    plt.tight_layout()
+    fig.savefig("experiment1_density.png", dpi=150)
+    plt.close()
+    print("  Saved experiment1_density.png")
+
+    return data
+
+
+# ---- Experiment 2: fix density ratio, vary n ----
+
+def experiment2():
+    print("\n" + "=" * 60)
+    print("EXPERIMENT 2: fix m = k*n, vary n")
+    print("=" * 60)
+
+    data = defaultdict(list)  # k -> [(n, m, avg, min, max, std)]
+
+    for k in LINEAR_DENSITIES:
+        print(f"\n  m = {k}n:")
+        for n in N_VALUES:
+            m = min(k * n, n * (n - 1) // 2)
+            t0 = time.time()
+            avg, lo, hi, std = run_trials(n, m)
+            dt = time.time() - t0
+            data[k].append((n, m, avg, lo, hi, std))
+            print(f"    n={n:>3}, m={m:>4} | avg={avg:8.1f}  "
+                  f"min={lo:5}  max={hi:5}  std={std:6.1f}  ({dt:.1f}s)")
+
+    # save csv
+    with open("experiment2_results.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["density_k", "n", "m_actual", "avg_messages",
+                     "min_messages", "max_messages", "std_dev"])
+        for k in LINEAR_DENSITIES:
+            for n, m, avg, lo, hi, std in data[k]:
+                w.writerow([k, n, m, f"{avg:.2f}", lo, hi, f"{std:.2f}"])
+    print("\n  Saved experiment2_results.csv")
+
+    # plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    colors = ["#2196F3", "#FF5722"]
+    marks = ["o", "s"]
+
+    for i, k in enumerate(LINEAR_DENSITIES):
+        ns = [r[0] for r in data[k]]
+        avgs = [r[2] for r in data[k]]
+        ax.plot(ns, avgs, marker=marks[i], linewidth=2, markersize=7,
+                color=colors[i], label=f"m = {k}n")
+
+    ax.set_xlabel("Number of Nodes (n)", fontsize=12)
+    ax.set_ylabel("Average Message Complexity", fontsize=12)
+    ax.set_title("Experiment 2: Impact of Graph Size on Message Complexity",
+                 fontsize=14, fontweight="bold")
+    ax.legend(title="Density", fontsize=10)
+    ax.grid(True, alpha=0.3)
+    ax.set_xticks(N_VALUES)
+    plt.tight_layout()
+    fig.savefig("experiment2_size.png", dpi=150)
+    plt.close()
+    print("  Saved experiment2_size.png")
+
+    return data
+
+
+# ---- print a summary at the end ----
+
+def summary(d1, d2):
+    print("\n" + "=" * 60)
+    print("SUMMARY")
+    print("=" * 60)
+
+    print("\n  Experiment 1 (avg messages):")
+    print(f"  {'n':>5} | {'m=n':>8} | {'m=nlogn':>10} | {'m=nsqrtn':>10} | {'m=n^2':>8}")
+    print("  " + "-" * 55)
+    for n in N_VALUES:
+        vals = " | ".join(f"{r[2]:8.1f}" for r in d1[n])
+        print(f"  {n:5} | {vals}")
+
+    for k in LINEAR_DENSITIES:
+        print(f"\n  Experiment 2 (m={k}n):")
+        for n, m, avg, lo, hi, std in d2[k]:
+            print(f"    n={n:3}: avg={avg:.1f}, std={std:.1f}")
+
+
+if __name__ == "__main__":
+    print(f"\nYo-Yo experimental analysis  |  {TRIALS} trials per config\n")
+
+    t0 = time.time()
+    d1 = experiment1()
+    d2 = experiment2()
+    summary(d1, d2)
+    print(f"\nDone in {time.time() - t0:.1f}s\n")
